@@ -335,6 +335,7 @@ double SrcLda::importance() {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//related to source part
 double SrcLda::evaluateLeftToRight() {
     double logNumParticles = log(10.0);
     double totalLogLikelihood = 0;
@@ -368,6 +369,7 @@ double SrcLda::evaluateLeftToRight() {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//related to source part
 void SrcLda::leftToRight(int doc, vector<double>& wordProbabilities) {
 
     unordered_map<int, unordered_map<int, int>> typeTopicCounts;
@@ -615,6 +617,7 @@ void SrcLda::leftToRight(int doc, vector<double>& wordProbabilities) {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//related to Src 
 void SrcLda::Display_loglike() {
 
     Calculate_theta();
@@ -644,6 +647,7 @@ void SrcLda::Display_loglike() {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//Related to src 
 void SrcLda::Display_perplexity() {
 
     Calculate_theta_test();
@@ -686,6 +690,7 @@ void SrcLda::Display_perplexity() {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//related to lda
 void SrcLda::Display_stats(int iter) {
     double avg_src = stats.cnt_src > 0 ? stats.tot_src / ((double)stats.cnt_src) : 0;
     double avg_reg = stats.cnt_reg > 0 ? stats.tot_reg / ((double)stats.cnt_reg) : 0;
@@ -701,162 +706,15 @@ void SrcLda::Display_stats(int iter) {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//related to src 
 void SrcLda::Hide_topic(int t) {
     visible_topics.erase(std::remove(visible_topics.begin(), visible_topics.end(), t), visible_topics.end());
     hidden[t] = true;
 }
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void SrcLda::load() {
-    cout << currentDateTime() << "...SrcLDA.load - Start\n";
-    I = options.I;
-    K = options.model == bijective ? 0 : options.K;
-    sigma = options.sigma;
-    A = sigma == 0.0 ? 1 : options.A;
-    mu = options.mu;
-    P = options.P;
-    cout << currentDateTime() << "...SrcLDA.load - Load corpus\n";
-    Load_corpus();
 
-    beta = ((double)200) / ((double)V);
-    cout << currentDateTime() << "...SrcLDA.load - Load deltas\n";
-    Load_deltas();
-    T = B + K;
-    cout << currentDateTime() << "...SrcLDA.load - Init counts\n";
-
-    Init_random();
-    Update_n();
-    hidden = new bool[T];
-    for (int i=0; i<T; i++) {
-        hidden[i] = false;
-        visible_topics.push_back(i);
-    }
-    alpha = 1.0;//((double)50) / ((double)visible_topics.size());
-    pr = new double[T];
-    if (options.perplexity != none) {
-        pr_test = new double[T];
-    }
-    cout << currentDateTime() << "...SrcLDA.load - Done\n";
-}
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
-void SrcLda::Init_g_t(){
-    gt_points.load_saved(options.gtpoints);
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void SrcLda::save(int iter) {
-    Calculate_theta();
-    Calculate_phi();
-    Write_distributions(iter);
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void SrcLda::prune(int iter, int n_prune, int start_y){
-    int burn = this->options.burn;
-    if (visible_topics.size() <= K) {
-        return;
-    }
-    double m = ((double)(start_y))/((double)(burn-(3*I/4)));
-    double b = start_y;
-    int cur_y = visible_topics.size()-K;
-    int des_y = m*((double)(iter-burn)) + b;
-    if (cur_y <= des_y) {
-        return;
-    }
-    int to_prune = cur_y - des_y;
-    std::map<int, vector<int>> ordered;
-    for (int i=0; i<T; i++) {
-        if (hidden[i]) {
-            continue;
-        }
-        int number_assign = 0;
-        for (int j=0; j<D; j++) {
-            number_assign += n_d[i][j];
-        }
-        ordered[number_assign].push_back(i);
-    }
-    bool keep[T];
-    for (int i=0; i<T; i++) {
-        keep[i] = false;
-    }
-    int idx = 0;
-    for (auto o_itr = ordered.begin(); o_itr != ordered.end(); ++o_itr) {
-        for (int i=0; i<o_itr->second.size(); i++) {
-            keep[o_itr->second[i]] = idx >= to_prune;
-            idx++;
-        }
-    }
-    for (int i=0; i<T; i++) {
-        if (hidden[i] || visible_topics.size() <= K) {
-            continue;
-        }
-        if (!keep[i]) {
-            cout << currentDateTime() << "...SrcLDA.gibbs - pruning topic " << i << endl;
-            Hide_topic(i);
-        }
-    }
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void SrcLda::gibbs() {
-    cout << currentDateTime() << "...SrcLDA.gibbs - Start\n";
-    int burn = this->options.burn;
-    int start_y = T-K;
-    int n_prune = ceil(((double)start_y) / ((double)(I-burn)));
-    stats.tot_iteration_time = 0;
-    for (int iter=0; iter <= I; iter++) {
-        stats.assign_correct = 0;
-        stats.assign_total = 0;
-        auto start = high_resolution_clock::now();
-        stats.tot_reg = 0;
-        stats.cnt_reg = 0;
-        stats.tot_src = 0;
-        stats.cnt_src = 0;
-        stats.iteration_time = 0;
-        cout << currentDateTime() << "...SrcLDA.gibbs - begin iter " << iter << "...topics " << visible_topics.size() << endl;
-        if (iter > 0 && options.show_loglike) {
-            Display_loglike();
-        }
-        if ((iter % 100 == 0 && iter > 0) || options.save_points.find(iter) != options.save_points.end()) {
-            if (options.perplexity != none) {
-                Display_perplexity();
-                Calculate_theta();
-                Write_distributions(iter);
-            }
-            else {
-                save(iter);
-            }
-        }
-        if (iter % burn == 0 && iter > 0 && options.model != bijective) {
-            prune(iter, n_prune, start_y);
-        }
-        for (int doc=0; doc<D; doc++) {
-            for (int token=0; token<corpus[doc].size(); token++) {
-                corpus_t[doc][token] = Sample(doc, token);
-            }
-        }
-        if (options.perplexity != none) {
-            for (int doc = 0; doc < corpus_test.size(); doc++) {
-                for (int token = 0; token < corpus_test[doc].size(); token++) {
-                    corpus_t_test[doc][token] = Sample_test(doc, token);
-                }
-            }
-        }
-        stats.iteration_time = duration_cast<milliseconds>(high_resolution_clock::now()-start).count();
-        stats.tot_iteration_time += stats.iteration_time;
-        Display_stats(iter);
-    }
-    cout << currentDateTime() << "...SrcLDA.gibbs - Done\n";
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-template <class T> void convertFromString(T &value, const std::string &s) {
-    std::stringstream ss(s);
-    ss >> value;
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
+//related to src
 void SrcLda::Load_deltas(){
 
     cout << currentDateTime() << "...SrcLDA.Load_deltas - begin\n";
@@ -960,8 +818,10 @@ void SrcLda::Load_deltas(){
     }
     cout << currentDateTime() << "...SrcLDA.Load_deltas - end\n";
 }
+
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//both src and LDA
 void SrcLda::Init_random(){
     corpus_t = new vector<int>[D];
     for (int doc=0; doc<D; doc++) {
@@ -972,7 +832,7 @@ void SrcLda::Init_random(){
         }
         corpus_t[doc] = topics;
     }
-
+    //src part
     if (options.perplexity != none) {
         corpus_t_test = new vector<int>[corpus_test.size()];
         for (int doc = 0; doc < corpus_test.size(); doc++) {
@@ -987,6 +847,7 @@ void SrcLda::Init_random(){
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//both srd and lda
 void SrcLda::Update_n(){
     n_w = new int*[T];
     n_w_dot = new int[T];
@@ -1054,11 +915,184 @@ void SrcLda::Update_n(){
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//loading src and LDA
+void SrcLda::load() {
+    cout << currentDateTime() << "...SrcLDA.load - Start\n";
+    I = options.I;
+    K = options.model == bijective ? 0 : options.K;
+    sigma = options.sigma;
+    A = sigma == 0.0 ? 1 : options.A;
+    mu = options.mu;
+    P = options.P;
+    cout << currentDateTime() << "...SrcLDA.load - Load corpus\n";
+    Load_corpus();
+
+    beta = ((double)200) / ((double)V);
+    cout << currentDateTime() << "...SrcLDA.load - Load deltas\n";
+    //specific for LDA
+    Load_deltas();
+    T = B + K;
+    cout << currentDateTime() << "...SrcLDA.load - Init counts\n";
+
+    Init_random();
+    Update_n();
+    hidden = new bool[T];
+    for (int i=0; i<T; i++) {
+        hidden[i] = false;
+        visible_topics.push_back(i);
+    }
+    alpha = 1.0;//((double)50) / ((double)visible_topics.size());
+    pr = new double[T];
+    if (options.perplexity != none) {
+        pr_test = new double[T];
+    }
+    cout << currentDateTime() << "...SrcLDA.load - Done\n";
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//src
+void SrcLda::Init_g_t(){
+    gt_points.load_saved(options.gtpoints);
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//lda
+void SrcLda::save(int iter) {
+    Calculate_theta();
+    Calculate_phi();
+    Write_distributions(iter);
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//src
+void SrcLda::prune(int iter, int n_prune, int start_y){
+    int burn = this->options.burn;
+    if (visible_topics.size() <= K) {
+        return;
+    }
+    double m = ((double)(start_y))/((double)(burn-(3*I/4)));
+    double b = start_y;
+    int cur_y = visible_topics.size()-K;
+    int des_y = m*((double)(iter-burn)) + b;
+    if (cur_y <= des_y) {
+        return;
+    }
+    int to_prune = cur_y - des_y;
+    std::map<int, vector<int>> ordered;
+    for (int i=0; i<T; i++) {
+        if (hidden[i]) {
+            continue;
+        }
+        int number_assign = 0;
+        for (int j=0; j<D; j++) {
+            number_assign += n_d[i][j];
+        }
+        ordered[number_assign].push_back(i);
+    }
+    bool keep[T];
+    for (int i=0; i<T; i++) {
+        keep[i] = false;
+    }
+    int idx = 0;
+    for (auto o_itr = ordered.begin(); o_itr != ordered.end(); ++o_itr) {
+        for (int i=0; i<o_itr->second.size(); i++) {
+            keep[o_itr->second[i]] = idx >= to_prune;
+            idx++;
+        }
+    }
+    for (int i=0; i<T; i++) {
+        if (hidden[i] || visible_topics.size() <= K) {
+            continue;
+        }
+        if (!keep[i]) {
+            cout << currentDateTime() << "...SrcLDA.gibbs - pruning topic " << i << endl;
+            Hide_topic(i);
+        }
+    }
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//src and lda
+void SrcLda::gibbs() {
+    cout << currentDateTime() << "...SrcLDA.gibbs - Start\n";
+    //src   
+    int burn = this->options.burn;
+    int start_y = T-K;
+    int n_prune = ceil(((double)start_y) / ((double)(I-burn)));
+    //lda
+    stats.tot_iteration_time = 0;
+    for (int iter=0; iter <= I; iter++) {
+        //src
+        stats.assign_correct = 0;
+        stats.assign_total = 0;
+        stats.tot_reg = 0;
+        stats.cnt_reg = 0;
+        stats.tot_src = 0;
+        stats.cnt_src = 0;
+        //lda
+        auto start = high_resolution_clock::now();
+        stats.iteration_time = 0;
+        cout << currentDateTime() << "...SrcLDA.gibbs - begin iter " << iter << "...topics " << visible_topics.size() << endl;
+        //src
+        if (iter > 0 && options.show_loglike) {
+            Display_loglike();
+        }
+        //lda
+        if ((iter % 100 == 0 && iter > 0) || options.save_points.find(iter) != options.save_points.end()) {
+            //src
+            if (options.perplexity != none) {
+                Display_perplexity();
+                Calculate_theta();
+                Write_distributions(iter);
+            }
+            else {
+                save(iter);
+            }
+        }
+        if (iter % burn == 0 && iter > 0 && options.model != bijective) {
+            prune(iter, n_prune, start_y);
+        }
+        //lda
+        for (int doc=0; doc<D; doc++) {
+            for (int token=0; token<corpus[doc].size(); token++) {
+                corpus_t[doc][token] = Sample(doc, token);
+            }
+        }
+        //src
+        if (options.perplexity != none) {
+            for (int doc = 0; doc < corpus_test.size(); doc++) {
+                for (int token = 0; token < corpus_test[doc].size(); token++) {
+                    corpus_t_test[doc][token] = Sample_test(doc, token);
+                }
+            }
+        }
+        //lda
+        stats.iteration_time = duration_cast<milliseconds>(high_resolution_clock::now()-start).count();
+        stats.tot_iteration_time += stats.iteration_time;
+        Display_stats(iter);
+    }
+    cout << currentDateTime() << "...SrcLDA.gibbs - Done\n";
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//src
+template <class T> void convertFromString(T &value, const std::string &s) {
+    std::stringstream ss(s);
+    ss >> value;
+}
+
+
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//src and lda
 void SrcLda::Populate_prob_test(int i, int t, int word, int doc, int start) {
+    //src
     if (t < K) {
+        //lda
         pr_test[i] = (( ((double)n_w[t][word]) + ((double)n_w_test[t][word]) + beta) / ( ((double)n_w_dot[t]) + ((double)n_w_dot_test[t]) + ((double) V) * beta)) *
                      (((double) n_d_test[t][doc] + alpha) / (((double) (corpus_test[doc].size() - 1)) + ((double) visible_topics.size()) * alpha));
     }
+    //src
     else {
         int b = t-K;
         double sum = 0.0;
@@ -1072,20 +1106,25 @@ void SrcLda::Populate_prob_test(int i, int t, int word, int doc, int start) {
 
         pr_test[i] = sum;
     }
+    //lda
     if (i > start) {
         pr_test[i] += pr_test[i-1];
     }
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//src and lda
 void SrcLda::Populate_prob(int i, int t, int word, int doc, int start) {
+    //src
     if (t < K) {
+        //lda
         pr[i] = (((double) n_w[t][word] + beta) / (((double) n_w_dot[t]) + ((double) V) * beta)) *
                 (((double) n_d[t][doc] + alpha) / (((double) (corpus[doc].size() - 1)) + ((double) visible_topics.size()) * alpha));
-
+        //src
         stats.cnt_reg++;
         stats.tot_reg += pr[i];
     }
+
     else {
         int b = t-K;
         double sum = 0.0;
@@ -1101,17 +1140,21 @@ void SrcLda::Populate_prob(int i, int t, int word, int doc, int start) {
         stats.cnt_src++;
         stats.tot_src += pr[i];
     }
+    //lda
     if (i > start) {
         pr[i] += pr[i-1];
     }
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//src and lda
 int SrcLda::Pop_sample_test(int word, int doc) {
+    //altered for src
     for (int i=0; i<visible_topics.size(); i++) {
         int t = visible_topics[i];
         Populate_prob_test(i, t, word, doc, 0);
     }
+    //lda
     double scale = pr_test[visible_topics.size()-1] * gsl_rng_uniform(RANDOM_NUMBER);
     int topic = 0;
     if (pr_test[0] <= scale) {
@@ -1129,6 +1172,7 @@ int SrcLda::Pop_sample_test(int word, int doc) {
 
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//same as above
 int SrcLda::Pop_sample(int word, int doc) {
     for (int i=0; i<visible_topics.size(); i++) {
         int t = visible_topics[i];
@@ -1150,7 +1194,9 @@ int SrcLda::Pop_sample(int word, int doc) {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//src and lda
 int SrcLda::Sample_test(int doc, int token){
+    //lda
     int topic = corpus_t_test[doc][token];
     int w = corpus_test[doc][token];
     n_d_test[topic][doc] = Max(n_d_test[topic][doc]-1, 0);
@@ -1158,7 +1204,9 @@ int SrcLda::Sample_test(int doc, int token){
     n_w_dot_test[topic] = Max(n_w_dot_test[topic]-1, 0);
     alpha = 1.0;//((double)50) / ((double)visible_topics.size());
     topic = Pop_sample_test(w, doc);
+    //src
     topic = visible_topics[topic];
+    //lda
     n_d_test[topic][doc]++;
     n_w_test[topic][w]++;
     n_w_dot_test[topic]++;
@@ -1167,7 +1215,9 @@ int SrcLda::Sample_test(int doc, int token){
 
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//src and lda
 int SrcLda::Sample(int doc, int token){
+    //lda
     int topic = corpus_t[doc][token];
     int w = corpus[doc][token];
     n_d[topic][doc] = Max(n_d[topic][doc]-1, 0);
@@ -1176,17 +1226,21 @@ int SrcLda::Sample(int doc, int token){
     if (n_d[topic][doc] == 0) {
         n_d_dot[topic]--;
     }
+    //src
     if (n_w_dot[topic] == 0 && visible_topics.size() > K && !hidden[topic] && options.model != bijective) {
         cout << currentDateTime() << "...removing topic " << topic << endl;
         Hide_topic(topic);
     }
+    //lda
     alpha = ((double)50) / ((double)visible_topics.size());
     topic = Pop_sample(w, doc);
+    //src
     topic = visible_topics[topic];
     stats.assign_total++;
     if (options.use_key && ground_truth[doc][token] == topic) {
         stats.assign_correct++;
     }
+    //lda
     if (n_d[topic][doc] == 0) {
         n_d_dot[topic]++;
     }
@@ -1213,11 +1267,13 @@ void SrcLda::Calculate_theta_test(){
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//src and lda
 void SrcLda::Calculate_theta(){
     for (int i=0; i<theta.size(); i++) {
         theta[i].clear();
     }
     theta.clear();
+    //altered for src
     int topic_count = visible_topics.size();
     for (int doc=0; doc<D; doc++) {
         vector<double> theta_d(T);
@@ -1229,11 +1285,14 @@ void SrcLda::Calculate_theta(){
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//src and lda
 void SrcLda::Calculate_phi(){
+    //lda
     for (int i=0; i<phi.size(); i++) {
         phi[i].clear();
     }
     phi.clear();
+    //altered src
     for (int t=0; t<T; t++) {
         vector<double> phi_t(V);
         if (t < K) {
@@ -1258,6 +1317,7 @@ void SrcLda::Calculate_phi(){
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//src
 string SrcLda::Clean(double d) {
 
     std::stringstream ss(stringstream::in | stringstream::out);
@@ -1272,6 +1332,7 @@ string SrcLda::Clean(double d) {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//src and lda
 void SrcLda::Write_distributions(int iter) {
 
     int top = options.display.top ? options.display.n : T;
@@ -1349,13 +1410,16 @@ void SrcLda::Write_distributions(int iter) {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//src and lda
 SrcLda::SrcLda(SrcLdaOptions options) {
+    //lda
     this->options = options;
     RANDOM_NUMBER = gsl_rng_alloc(gsl_rng_taus);
     time_t t;
     time(&t);
     long seed = (long) t;
     gsl_rng_set(RANDOM_NUMBER, (long) seed);
+    //src
     if (options.output_dir.back() == '/') {
         this->options.output_dir = options.output_dir.substr(0, options.output_dir.size()-1);
     }

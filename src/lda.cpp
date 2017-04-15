@@ -26,7 +26,7 @@ LdaOptions::LdaOptions() {
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
 void Lda::Load_corpus(){
-
+    //reading corpus like srclda
     ifstream fin;
     int id = 0;
     fin.open(options.corpus, ios_base::in);
@@ -72,7 +72,7 @@ void Lda::load() {
     cout << currentDateTime() << "...LDA.load - Load corpus\n";
 
     Load_corpus();
-
+    //set alpha and beta
     alpha = ((double)50) / ((double)K);
     beta = ((double)200) / ((double)V);
 
