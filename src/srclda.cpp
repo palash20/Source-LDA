@@ -52,29 +52,40 @@ SrcLdaOptions::SrcLdaOptions() {
 void SrcLda::Load_corpus(){
 
     if (options.use_key) {
+        //read input from a file
         ifstream fin_t;
         fin_t.open(options.key, ios_base::in);
+
+        //extract and store in string line
         for (string line; getline(fin_t, line);) {
             istringstream fstring(line);
+            
+            //store terms ids to doc ids
             int t_id;
             vector<int> doc_key;
             while (fstring >> t_id) {
                 doc_key.push_back(t_id);
             }
+            //maybe main thing containing document distibution
             ground_truth.push_back(doc_key);
         }
         fin_t.close();
     }
 
+
+    //inputing corpus
     ifstream fin;
     fin.open(options.corpus, ios_base::in);
     vector<string> lines;
 
     for (string line; getline(fin, line);) {
+        //data in lines
         lines.push_back(line);
     }
     fin.close();
 
+    //making test and training set 80/20
+    //train data - lines , test data - lines_test
     vector<string> lines_test;
     if (options.perplexity != none) {
         int train = (int)(((double)lines.size()) * 0.8);
@@ -88,15 +99,20 @@ void SrcLda::Load_corpus(){
 
     unordered_set<string> vocab;
     int id = 0;
+    //
     for (int i=0; i<lines.size(); i++) {
+        //read each line in training data
         string line = lines[i];
         istringstream fstring(line);
         vector<int> document;
         string word;
         int token;
         while (fstring >> word) {
+            //read each word in line and store in vocab
             unordered_set<string>::const_iterator iter = vocab.find(word);
+            //each new word will be inserted at the end
             if (iter == vocab.end()) {
+                //allocate new id to every new word
                 vocab.insert(word);
                 word_id[word] = id;
                 id_word[id] = word;
