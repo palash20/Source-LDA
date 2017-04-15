@@ -114,25 +114,36 @@ void SrcLda::Load_corpus(){
             if (iter == vocab.end()) {
                 //allocate new id to every new word
                 vocab.insert(word);
+                //word_id and id_word defined in header file
                 word_id[word] = id;
                 id_word[id] = word;
                 id++;
             }
+            //get token of each word
             token = word_id[word];
+            //document contains ordered list of tokens
             document.push_back(token);
         }
+        //generating corpus
         corpus.push_back(document);
     }
 
     V = vocab.size();
 
+    //dynamic mem allocation 
     n_t = new int*[V];
-    for (int i=0; i<V; i++) {
+
+    //create and initialise word - doc matrix ; row - word , col - docs
+    for (int i=0; i<V; i++){
         n_t[i] = new int[corpus.size()];
+        //initialize values to 0
         for (int j=0; j<corpus.size(); j++) {
             n_t[i][j] = 0;
         }
     }
+
+    //corpus[i][j] -> freq of jth token/word in ith doc 
+    //fill the word-doc matrix
     for (int i=0; i<corpus.size(); i++) {
         for (int j=0; j<corpus[i].size(); j++) {
             int token = corpus[i][j];
@@ -140,6 +151,8 @@ void SrcLda::Load_corpus(){
         }
     }
 
+    //don't know why this if condition
+    //generating word-doc for test data
     if (options.perplexity != none) {
         test_tokens = 0;
         for (int i=0; i<lines_test.size(); i++) {
@@ -174,7 +187,7 @@ void SrcLda::Load_corpus(){
             }
         }
     }
-
+    //D = number of docs
     D = corpus.size();
 }
 //----------------------------------------------------------------------------------
@@ -182,17 +195,19 @@ void SrcLda::Load_corpus(){
 double SrcLda::importance() {
 
     const int S = 100;
-
+    //some math calculating alpha
     double totalLogLikelihood = 0.0;
     double topic_alpha = ((double)visible_topics.size()) * alpha;
     double topic_alpha_g = gammaln(topic_alpha);
     double sum_alpha_g = 0.0;
+    
     for (int j=0; j<visible_topics.size(); j++) {
         sum_alpha_g += gammaln(alpha);
     }
     double sum_gamma_alphas = topic_alpha_g - sum_alpha_g;
 
     for (int i=0; i<corpus_test.size(); i++) {
+        //sums of words over each doc
         double sums[corpus_test[i].size()];
         for (int j=0; j<corpus_test[i].size(); j++) {
             sums[j] = 0.0;
@@ -201,6 +216,7 @@ double SrcLda::importance() {
         vector<vector<double>> q_sum;
         for (int tok=0; tok<corpus_test[i].size(); tok++) {
             vector<double> topic_probs;
+            //visible_topics - known labeled topics of wiki we want to make visible
             for (int j=0; j<visible_topics.size(); j++) {
                 int t = visible_topics[j];
                 int w = corpus_test[i][tok];
