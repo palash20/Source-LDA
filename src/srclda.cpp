@@ -218,6 +218,7 @@ double SrcLda::importance() {
             vector<double> topic_probs;
             //visible_topics - known labeled topics of wiki we want to make visible
             for (int j=0; j<visible_topics.size(); j++) {
+                
                 int t = visible_topics[j];
                 int w = corpus_test[i][tok];
                 auto iter = id_word.find(w);
