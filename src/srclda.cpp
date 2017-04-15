@@ -66,7 +66,7 @@ void SrcLda::Load_corpus(){
             while (fstring >> t_id) {
                 doc_key.push_back(t_id);
             }
-            //maybe main thing containing document distibution
+            //vector containing document distibution
             ground_truth.push_back(doc_key);
         }
         fin_t.close();
@@ -130,10 +130,10 @@ void SrcLda::Load_corpus(){
 
     V = vocab.size();
 
-    //dynamic mem allocation 
+    //dynamic mem allocation; 
     n_t = new int*[V];
 
-    //create and initialise word - doc matrix ; row - word , col - docs
+    //create and initialise word - doc freq matrix ; row - word , col - docs
     for (int i=0; i<V; i++){
         n_t[i] = new int[corpus.size()];
         //initialize values to 0
@@ -142,7 +142,7 @@ void SrcLda::Load_corpus(){
         }
     }
 
-    //corpus[i][j] -> freq of jth token/word in ith doc 
+    //corpus[i][j] -> id of jth word in ith doc 
     //fill the word-doc matrix
     for (int i=0; i<corpus.size(); i++) {
         for (int j=0; j<corpus[i].size(); j++) {
@@ -190,6 +190,7 @@ void SrcLda::Load_corpus(){
     //D = number of docs
     D = corpus.size();
 }
+
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
 double SrcLda::importance() {
@@ -218,29 +219,41 @@ double SrcLda::importance() {
             vector<double> topic_probs;
             //visible_topics - known labeled topics of wiki we want to make visible
             for (int j=0; j<visible_topics.size(); j++) {
-                
+                //word j in topic t
                 int t = visible_topics[j];
+                //w = index of token in doc i
                 int w = corpus_test[i][tok];
+                //iter = index of word w
                 auto iter = id_word.find(w);
                 if (iter == id_word.end()) {
                     continue;
                 }
+                //probability of each token tok in doc i with each word in visible topic j 
                 double topic_prob = alpha * phi[j][w];
+                //sums of prob of all words in visible with token
                 sums[tok] += topic_prob;
+                //contain prob of all words in vis with a tokens in a document
                 topic_probs.push_back(topic_prob);
             }
+            //contain prob of all words in vis with all tokens in a document
             q.push_back(topic_probs);
             q_sum.push_back(topic_probs);
         }
+
+        //divide each prob of word v with total prob of that token
         for (int tok=0; tok<q.size(); tok++) {
             for (int j=0; j<q[tok].size(); j++) {
                 q[tok][j] = q[tok][j] / sums[tok];
                 double add = j == 0 ? 0.0 : q_sum[tok][j-1];
+                //cumulative sum of q
                 q_sum[tok][j] = q[tok][j] + add;
             }
         }
+
+        
         vector<vector<int>> samples;
         vector<vector<int>> samples_topic;
+        //visible topics.size() x S vector
         for (int j=0; j<visible_topics.size(); j++) {
             vector<int> top_samples;
             for (int s=0; s<S; s++) {
@@ -248,16 +261,21 @@ double SrcLda::importance() {
             }
             samples_topic.push_back(top_samples);
         }
-        for (int tok=0; tok<corpus_test[i].size(); tok++) {
+
+        //scalling q_sum but don't know why and criteria
+        // also something with smaple_topic
+        for (int tok=0; tok<corpus_test[i].size(); tok++){
             vector<int> tok_samples;
-            for (int s=0; s<S; s++) {
+            for (int s=0; s<S; s++){
                 double scale = q_sum[tok].back() * gsl_rng_uniform(RANDOM_NUMBER);
                 int topic = 0;
-                if (q_sum[tok][0] <= scale) {
+                if (q_sum[tok][0] <= scale){
                     int low = 0;
                     int high = q_sum[tok].size()-1;
-                    while (low <= high) {
-                        if (low == high - 1) { topic = high; break; }
+                    while (low <= high){
+                        if (low == high - 1){
+                            topic = high; break; 
+                        }
                         int mid = (low + high) / 2;
                         if (q_sum[tok][mid] > scale) high = mid;
                         else low = mid;
@@ -269,6 +287,7 @@ double SrcLda::importance() {
             samples.push_back(tok_samples);
         }
 
+        //no idea from here
         vector<double> log_pz;
         double token_topic_alpha_g = gammaln(((double)corpus_test[i].size()) + topic_alpha);
         for (int s=0; s<S; s++) {
@@ -278,6 +297,8 @@ double SrcLda::importance() {
             }
             log_pz.push_back(sum + sum_gamma_alphas - token_topic_alpha_g);
         }
+
+
         vector<double> log_w_given_z;
         for (int s=0; s<S; s++){
             log_w_given_z.push_back(0.0);
@@ -307,8 +328,9 @@ double SrcLda::importance() {
             log_weights.push_back(log_joint[s] - log_q[s]);
         }
         totalLogLikelihood += (logsumexp(log_weights) - log(((double)S)));
-    }
+    
 
+    }
     return totalLogLikelihood;
 }
 //----------------------------------------------------------------------------------

@@ -74,13 +74,13 @@ protected:
     src_stats stats;
     GtPoints gt_points;
     vector<string> topic_labels;
-    vector<vector<int>> corpus;
+    vector<vector<int>> corpus; //stores documents with words distribtuib
     vector<vector<int>> corpus_test;
     int test_tokens;
     vector<int>* corpus_t;
     vector<int>* corpus_t_test;
     bool* hidden;
-    vector<int> visible_topics;
+    vector<int> visible_topics; //topics which we want to make visible
     vector<vector<int>> ground_truth;
     double* pr;
     double* pr_test;
@@ -91,11 +91,11 @@ protected:
     int* n_d_dot;
     int* n_w_dot;
     int* n_w_dot_test;
-    int** n_t;
+    int** n_t;  //dyn allocation , word - doc matrix
     int** n_t_test;
     double* norm;
-    unordered_map<string, int> word_id;
-    unordered_map<int, string> id_word;
+    unordered_map<string, int> word_id; //maps word to id
+    unordered_map<int, string> id_word; //maps id to word
     SrcLdaOptions options;
     void leftToRight(int doc, vector<double>& wordProbabilities);
     double evaluateLeftToRight();
