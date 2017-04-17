@@ -31,7 +31,7 @@ ConceptLdaOptions::ConceptLdaOptions() {
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
 void ConceptLda::Load_corpus(){
-
+    //extra
     ifstream fin_t;
     fin_t.open(options.key, ios_base::in);
     for (string line; getline(fin_t, line);) {
@@ -45,7 +45,7 @@ void ConceptLda::Load_corpus(){
     }
     fin_t.close();
 
-
+    //LDA
     ifstream fin;
     int id = 0;
     fin.open(options.corpus, ios_base::in);
@@ -85,12 +85,14 @@ void ConceptLda::Display_stats(int iter) {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//extra
 void ConceptLda::Hide_topic(int t) {
     visible_topics.erase(std::remove(visible_topics.begin(), visible_topics.end(), t), visible_topics.end());
     hidden[t] = true;
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//ctm
 void ConceptLda::Load_concepts(){
 
     cout << currentDateTime() << "...ConceptLDA.Load_concepts - begin\n";
@@ -127,6 +129,89 @@ void ConceptLda::Load_concepts(){
     V_c = c_vocab.size();
 
     cout << currentDateTime() << "...ConceptLDA.Load_concepts - end\n";
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+void ConceptLda::Init_random(){
+    corpus_t = new vector<int>[D];
+    for (int doc=0; doc<D; doc++) {
+        vector<int> topics;
+        for (int token=0; token<corpus[doc].size(); token++) {
+            int w = corpus[doc][token];
+            int t = Rand(RANDOM_NUMBER, 0, T-1);
+            topics.push_back(t);
+        }
+        corpus_t[doc] = topics;
+    }
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//this will be taken as it is
+void ConceptLda::Update_n(){
+    //n_w_phi similar to n_w in lda
+    n_w_phi = new int*[K];
+    n_w_psi = new int*[B];
+    n_w_dot_phi = new int[K];
+    n_w_dot_psi = new int[B];
+    n_d_dot = new int[T];
+    n_d = new int*[T];
+
+    for (int i=0; i<K; i++) {
+        n_w_dot_phi[i] = 0;
+        n_w_phi[i] = new int[V];
+        for (int j=0; j<V; j++) {
+            n_w_phi[i][j] = 0;
+        }
+    }
+
+    for (int i=0; i<B; i++) {
+        n_w_dot_psi[i] = 0;
+        n_w_psi[i] = new int[V];
+        for (int j=0; j<V; j++) {
+            n_w_psi[i][j] = 0;
+        }
+    }
+
+    for (int i=0; i<T; i++) {
+        n_d_dot[i] = 0;
+        n_d[i] = new int[D];
+        for (int j=0; j<D; j++) {
+            n_d[i][j] = 0;
+        }
+    }
+
+    for (int doc=0; doc<D; doc++) {
+        unordered_set<int> topics_in_doc;
+        for (int token = 0; token < corpus[doc].size(); token++) {
+            int t = corpus_t[doc][token];
+            int w = corpus[doc][token];
+            topics_in_doc.insert(t);
+            if (t < K) {
+                n_w_phi[t][w]++;
+                n_w_dot_phi[t]++;
+            }
+            else {
+                n_w_psi[t-K][w]++;
+                n_w_dot_psi[t-K]++;
+            }
+
+            n_d[t][doc]++;
+        }
+        for (auto itr = topics_in_doc.begin(); itr != topics_in_doc.end(); ++itr) {
+            n_d_dot[(*itr)]++;
+        }
+    }
+    for (int i=0; i<K; i++) {
+        if (n_w_dot_phi[i] == 0) {
+            Hide_topic(i);
+        }
+    }
+    for (int i=0; i<B; i++) {
+        if (n_w_dot_psi[i] == 0 && options.model != bijective) {
+            cout << currentDateTime() << "...removing topic " << (i+K) << endl;
+            Hide_topic(i+K);
+        }
+    }
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
@@ -182,6 +267,7 @@ void ConceptLda::save() {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
+//same in src
 void ConceptLda::prune(int iter, int n_prune, int start_y){
 
     int burn = this->options.burn;
@@ -278,87 +364,7 @@ void ConceptLda::gibbs() {
 
     cout << currentDateTime() << "...ConceptLDA.gibbs - Done\n";
 }
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void ConceptLda::Init_random(){
-    corpus_t = new vector<int>[D];
-    for (int doc=0; doc<D; doc++) {
-        vector<int> topics;
-        for (int token=0; token<corpus[doc].size(); token++) {
-            int w = corpus[doc][token];
-            int t = Rand(RANDOM_NUMBER, 0, T-1);
-            topics.push_back(t);
-        }
-        corpus_t[doc] = topics;
-    }
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void ConceptLda::Update_n(){
-    n_w_phi = new int*[K];
-    n_w_psi = new int*[B];
-    n_w_dot_phi = new int[K];
-    n_w_dot_psi = new int[B];
-    n_d_dot = new int[T];
-    n_d = new int*[T];
 
-    for (int i=0; i<K; i++) {
-        n_w_dot_phi[i] = 0;
-        n_w_phi[i] = new int[V];
-        for (int j=0; j<V; j++) {
-            n_w_phi[i][j] = 0;
-        }
-    }
-
-    for (int i=0; i<B; i++) {
-        n_w_dot_psi[i] = 0;
-        n_w_psi[i] = new int[V];
-        for (int j=0; j<V; j++) {
-            n_w_psi[i][j] = 0;
-        }
-    }
-
-    for (int i=0; i<T; i++) {
-        n_d_dot[i] = 0;
-        n_d[i] = new int[D];
-        for (int j=0; j<D; j++) {
-            n_d[i][j] = 0;
-        }
-    }
-
-    for (int doc=0; doc<D; doc++) {
-        unordered_set<int> topics_in_doc;
-        for (int token = 0; token < corpus[doc].size(); token++) {
-            int t = corpus_t[doc][token];
-            int w = corpus[doc][token];
-            topics_in_doc.insert(t);
-            if (t < K) {
-                n_w_phi[t][w]++;
-                n_w_dot_phi[t]++;
-            }
-            else {
-                n_w_psi[t-K][w]++;
-                n_w_dot_psi[t-K]++;
-            }
-
-            n_d[t][doc]++;
-        }
-        for (auto itr = topics_in_doc.begin(); itr != topics_in_doc.end(); ++itr) {
-            n_d_dot[(*itr)]++;
-        }
-    }
-    for (int i=0; i<K; i++) {
-        if (n_w_dot_phi[i] == 0) {
-            Hide_topic(i);
-        }
-    }
-    for (int i=0; i<B; i++) {
-        if (n_w_dot_psi[i] == 0 && options.model != bijective) {
-            cout << currentDateTime() << "...removing topic " << (i+K) << endl;
-            Hide_topic(i+K);
-        }
-    }
-}
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
 void ConceptLda::Populate_prob(int i, int t, int word, int doc, int start) {

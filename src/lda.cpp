@@ -51,8 +51,9 @@ void Lda::Load_corpus(){
         }
         corpus.push_back(document);
     }
-
+    //docs and their ordered words distribution
     D = corpus.size();
+    //complete vocab of words in all docs
     V = vocab.size();
 }
 //----------------------------------------------------------------------------------
@@ -60,6 +61,63 @@ void Lda::Load_corpus(){
 void Lda::Display_stats(int iter) {
     cout << currentDateTime() << "...LDA.gibbs - end iter...iteration time " << stats.iteration_time << endl;
     cout << currentDateTime() << "...LDA.gibbs - end iter...avg iteration time " << ((double)stats.tot_iteration_time) / ((double)iter+1)  << endl;
+}
+
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//corpus_t has same structure as corpus but with random entries
+void Lda::Init_random(){
+    corpus_t = new vector<int>[D];
+    for (int doc=0; doc<D; doc++) {
+        vector<int> topics;
+        for (int token=0; token<corpus[doc].size(); token++) {
+            //maybe random topic alloted to each word in doc
+            int t = Rand(RANDOM_NUMBER, 0, K-1);
+            topics.push_back(t);
+        }
+        corpus_t[doc] = topics;
+    }
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+void Lda::Update_n(){
+	//n_w - topic vocab freq distibution
+    n_w = new int*[K];
+    //total topics over words
+    n_w_dot = new int[K];
+    //total topics over docs
+    n_d_dot = new int[K];
+    //n_d - topic doc freq distribution
+    n_d = new int*[K];
+    for (int i=0; i<K; i++) {
+        n_w_dot[i] = 0;
+        n_w[i] = new int[V];
+        n_d_dot[i] = 0;
+        for (int j=0; j<V; j++) {
+            n_w[i][j] = 0;
+        }
+        n_d[i] = new int[D];
+        for (int j=0; j<D; j++) {
+            n_d[i][j] = 0;
+        }
+    }
+
+    for (int doc=0; doc<D; doc++) {
+        unordered_set<int> topics_in_doc;
+        for (int token = 0; token < corpus[doc].size(); token++) {
+            //t = topic alloted to each word of doc
+            int t = corpus_t[doc][token];
+            //w = word_id of each ordered word in doc
+            int w = corpus[doc][token];
+            topics_in_doc.insert(t);
+            n_w[t][w]++;
+            n_d[t][doc]++;
+            n_w_dot[t]++;
+        }
+        for (auto itr = topics_in_doc.begin(); itr != topics_in_doc.end(); ++itr) {
+            n_d_dot[(*itr)]++;
+        }
+    }
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
@@ -70,7 +128,7 @@ void Lda::load() {
     I = options.I;
 
     cout << currentDateTime() << "...LDA.load - Load corpus\n";
-
+    //make corpus and vocab
     Load_corpus();
     //set alpha and beta
     alpha = ((double)50) / ((double)K);
@@ -80,7 +138,9 @@ void Lda::load() {
 
     K = options.K;
     cout << currentDateTime() << "...LDA.load - Init counts\n";
+    //randomly assign topics corpus_t
     Init_random();
+    //form word-topic and topic-doc matrices
     Update_n();
     pr = new double[K];
 
@@ -88,10 +148,107 @@ void Lda::load() {
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
-void Lda::save() {
-    Calculate_theta();
-    Calculate_phi();
-    Write_distributions();
+//calcluate indiv theta for each doc and store all in theta
+void Lda::Calculate_theta(){
+    for (int i=0; i<theta.size(); i++) {
+        theta[i].clear();
+    }
+    theta.clear();
+
+    int topic_count = K;
+
+    for (int doc=0; doc<D; doc++) {
+        vector<double> theta_d(K);
+        for (int t=0; t<K; t++) {
+            theta_d[t] = (((double)n_d[t][doc]) + alpha) / (((double)corpus[doc].size()) + (((double)topic_count)*alpha));
+        }
+        theta.push_back(theta_d);
+    }
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//calcluate indiv theta for each word and store all in theta
+void Lda::Calculate_phi(){
+    for (int i=0; i<phi.size(); i++) {
+        phi[i].clear();
+    }
+    phi.clear();
+    for (int t=0; t<K; t++) {
+        vector<double> phi_t(V);
+        for (int w=0; w<V; w++) {
+            phi_t[w] = (((double)n_w[t][w]) + beta)/(((double)n_w_dot[t]) + (((double)V)*beta));
+        }
+        phi.push_back(phi_t);
+    }
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//cal prob for each topic
+void Lda::Populate_prob(int i, int t, int word, int doc, int start) {
+	//prob i = phi * theta
+    pr[i] = (((double) n_w[t][word] + beta) / (((double) n_w_dot[t]) + ((double) V) * beta)) *
+            (((double) n_d[t][doc] + alpha) / (((double) (corpus[doc].size() - 1)) + ((double) K) * alpha));
+    //add prev prob also don't know why
+    if (i > start) {
+        pr[i] += pr[i-1];
+    }
+}
+
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+int Lda::Pop_sample(int word, int doc) {
+
+    for (int i=0; i<K; i++) {
+        int t = i;
+        //calc prob for each topic
+        Populate_prob(i, t, word, doc, 0);
+    }
+
+    double scale = pr[K-1] * gsl_rng_uniform(RANDOM_NUMBER);
+
+    int topic = 0;
+    //myb binary search for topic
+    if (pr[0] <= scale) {
+        int low = 0;
+        int high = K-1;
+        while (low <= high) {
+            if (low == high - 1) { topic = high; break; }
+            int mid = (low + high) / 2;
+            if (pr[mid] > scale) high = mid;
+            else low = mid;
+        }
+    }
+
+    return topic;
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+//don't know
+int Lda::Sample(int doc, int token){
+
+    int topic = corpus_t[doc][token];
+    int w = corpus[doc][token];
+
+    n_d[topic][doc] = Max(n_d[topic][doc]-1, 0);
+    n_w[topic][w] = Max(n_w[topic][w]-1, 0);
+    n_w_dot[topic] = Max(n_w_dot[topic]-1, 0);
+
+    if (n_d[topic][doc] == 0) {
+        n_d_dot[topic]--;
+    }
+
+    alpha = ((double)50) / ((double)K);
+    topic = Pop_sample(w, doc);
+
+    if (n_d[topic][doc] == 0) {
+        n_d_dot[topic]++;
+    }
+
+    n_d[topic][doc]++;
+    n_w[topic][w]++;
+    n_w_dot[topic]++;
+    return topic;
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
@@ -125,153 +282,11 @@ void Lda::gibbs() {
 
     cout << currentDateTime() << "...LDA.gibbs - Done\n";
 }
+
+
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
-void Lda::Init_random(){
-    corpus_t = new vector<int>[D];
-    for (int doc=0; doc<D; doc++) {
-        vector<int> topics;
-        for (int token=0; token<corpus[doc].size(); token++) {
-            int t = Rand(RANDOM_NUMBER, 0, K-1);
-            topics.push_back(t);
-        }
-        corpus_t[doc] = topics;
-    }
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void Lda::Update_n(){
-    n_w = new int*[K];
-    n_w_dot = new int[K];
-    n_d_dot = new int[K];
-    n_d = new int*[K];
-    for (int i=0; i<K; i++) {
-        n_w_dot[i] = 0;
-        n_w[i] = new int[V];
-        n_d_dot[i] = 0;
-        for (int j=0; j<V; j++) {
-            n_w[i][j] = 0;
-        }
-        n_d[i] = new int[D];
-        for (int j=0; j<D; j++) {
-            n_d[i][j] = 0;
-        }
-    }
-
-    for (int doc=0; doc<D; doc++) {
-        unordered_set<int> topics_in_doc;
-        for (int token = 0; token < corpus[doc].size(); token++) {
-            int t = corpus_t[doc][token];
-            int w = corpus[doc][token];
-            topics_in_doc.insert(t);
-            n_w[t][w]++;
-            n_d[t][doc]++;
-            n_w_dot[t]++;
-        }
-        for (auto itr = topics_in_doc.begin(); itr != topics_in_doc.end(); ++itr) {
-            n_d_dot[(*itr)]++;
-        }
-    }
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void Lda::Populate_prob(int i, int t, int word, int doc, int start) {
-
-    pr[i] = (((double) n_w[t][word] + beta) / (((double) n_w_dot[t]) + ((double) V) * beta)) *
-            (((double) n_d[t][doc] + alpha) / (((double) (corpus[doc].size() - 1)) + ((double) K) * alpha));
-
-    if (i > start) {
-        pr[i] += pr[i-1];
-    }
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-int Lda::Pop_sample(int word, int doc) {
-
-    for (int i=0; i<K; i++) {
-        int t = i;
-        Populate_prob(i, t, word, doc, 0);
-    }
-
-    double scale = pr[K-1] * gsl_rng_uniform(RANDOM_NUMBER);
-
-    int topic = 0;
-
-    if (pr[0] <= scale) {
-        int low = 0;
-        int high = K-1;
-        while (low <= high) {
-            if (low == high - 1) { topic = high; break; }
-            int mid = (low + high) / 2;
-            if (pr[mid] > scale) high = mid;
-            else low = mid;
-        }
-    }
-
-    return topic;
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-int Lda::Sample(int doc, int token){
-
-    int topic = corpus_t[doc][token];
-    int w = corpus[doc][token];
-
-    n_d[topic][doc] = Max(n_d[topic][doc]-1, 0);
-    n_w[topic][w] = Max(n_w[topic][w]-1, 0);
-    n_w_dot[topic] = Max(n_w_dot[topic]-1, 0);
-
-    if (n_d[topic][doc] == 0) {
-        n_d_dot[topic]--;
-    }
-
-    alpha = ((double)50) / ((double)K);
-    topic = Pop_sample(w, doc);
-
-    if (n_d[topic][doc] == 0) {
-        n_d_dot[topic]++;
-    }
-
-    n_d[topic][doc]++;
-    n_w[topic][w]++;
-    n_w_dot[topic]++;
-    return topic;
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void Lda::Calculate_theta(){
-    for (int i=0; i<theta.size(); i++) {
-        theta[i].clear();
-    }
-    theta.clear();
-
-    int topic_count = K;
-
-    for (int doc=0; doc<D; doc++) {
-        vector<double> theta_d(K);
-        for (int t=0; t<K; t++) {
-            theta_d[t] = (((double)n_d[t][doc]) + alpha) / (((double)corpus[doc].size()) + (((double)topic_count)*alpha));
-        }
-        theta.push_back(theta_d);
-    }
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
-void Lda::Calculate_phi(){
-    for (int i=0; i<phi.size(); i++) {
-        phi[i].clear();
-    }
-    phi.clear();
-    for (int t=0; t<K; t++) {
-        vector<double> phi_t(V);
-        for (int w=0; w<V; w++) {
-            phi_t[w] = (((double)n_w[t][w]) + beta)/(((double)n_w_dot[t]) + (((double)V)*beta));
-        }
-        phi.push_back(phi_t);
-    }
-}
-//----------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------
+//outputing all the distributions
 void Lda::Write_distributions() {
 
     ofstream theta_out;
@@ -318,6 +333,13 @@ void Lda::Write_distributions() {
     }
 
     t_out.close();
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+void Lda::save() {
+    Calculate_theta();
+    Calculate_phi();
+    Write_distributions();
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------

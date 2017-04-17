@@ -143,7 +143,7 @@ void SrcLda::Load_corpus(){
     }
 
     //corpus[i][j] -> id of jth word in ith doc 
-    //fill the word-doc matrix
+    //fill the freq word-doc matrix
     for (int i=0; i<corpus.size(); i++) {
         for (int j=0; j<corpus[i].size(); j++) {
             int token = corpus[i][j];
@@ -715,6 +715,7 @@ void SrcLda::Hide_topic(int t) {
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
 //related to src
+//calculate lamda and delta
 void SrcLda::Load_deltas(){
 
     cout << currentDateTime() << "...SrcLDA.Load_deltas - begin\n";
@@ -734,6 +735,7 @@ void SrcLda::Load_deltas(){
         fstring >> label;
         topic_labels.push_back(label);
 
+        //bijective mapping
         vector<double> src_words(V);
         for (int i = 0; i < V; i++) {
             src_words[i] = epsilon;
@@ -760,7 +762,7 @@ void SrcLda::Load_deltas(){
     for (int i=0; i<B; i++) {
         delta_pow_sums[i] = new double[A];
     }
-
+    //calculating lambda
     if (sigma == 0.0) {
         lambdas = new double[1];
     }
